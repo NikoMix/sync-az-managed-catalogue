@@ -1,0 +1,1 @@
+# sync-az-managed-catalogue
