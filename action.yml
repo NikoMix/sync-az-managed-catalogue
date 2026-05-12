@@ -1,0 +1,77 @@
+name: Sync Azure Managed Catalogue
+description: Package managed application folders, upload to Azure Storage, and create or update Azure Managed Application definitions.
+author: sync-az-managed-catalogue
+branding:
+  icon: upload-cloud
+  color: blue
+
+inputs:
+  source-folder:
+    description: Path containing one subfolder per managed application package.
+    required: false
+    default: catalog
+  storage-account-name:
+    description: Azure Storage Account name used for package uploads.
+    required: true
+  storage-account-key:
+    description: Azure Storage Account key used for blob upload operations.
+    required: true
+  storage-container:
+    description: Blob container name to store uploaded package zip files.
+    required: false
+    default: managedapp-packages
+  definition-resource-group:
+    description: Resource group where managed application definitions are created.
+    required: true
+  definition-location:
+    description: Azure region used for managed application definitions.
+    required: true
+  authorization-principal-id:
+    description: Principal object ID that receives permissions on managed resource groups.
+    required: true
+  authorization-role-definition-id:
+    description: Role definition ID (GUID) assigned to the authorization principal.
+    required: true
+  lock-level:
+    description: Managed application definition lock level.
+    required: false
+    default: ReadOnly
+  name-prefix:
+    description: Optional prefix added to generated definition names.
+    required: false
+    default: ""
+  subscription-id:
+    description: Optional Azure subscription ID to select before processing.
+    required: false
+    default: ""
+
+outputs:
+  processed-count:
+    description: Number of package folders processed successfully.
+    value: ${{ steps.sync.outputs.processed-count }}
+  created-count:
+    description: Number of managed application definitions created.
+    value: ${{ steps.sync.outputs.created-count }}
+  updated-count:
+    description: Number of managed application definitions updated.
+    value: ${{ steps.sync.outputs.updated-count }}
+
+runs:
+  using: composite
+  steps:
+    - id: sync
+      shell: bash
+      env:
+        INPUT_SOURCE_FOLDER: ${{ inputs.source-folder }}
+        INPUT_STORAGE_ACCOUNT_NAME: ${{ inputs.storage-account-name }}
+        INPUT_STORAGE_ACCOUNT_KEY: ${{ inputs.storage-account-key }}
+        INPUT_STORAGE_CONTAINER: ${{ inputs.storage-container }}
+        INPUT_DEFINITION_RESOURCE_GROUP: ${{ inputs.definition-resource-group }}
+        INPUT_DEFINITION_LOCATION: ${{ inputs.definition-location }}
+        INPUT_AUTHORIZATION_PRINCIPAL_ID: ${{ inputs.authorization-principal-id }}
+        INPUT_AUTHORIZATION_ROLE_DEFINITION_ID: ${{ inputs.authorization-role-definition-id }}
+        INPUT_LOCK_LEVEL: ${{ inputs.lock-level }}
+        INPUT_NAME_PREFIX: ${{ inputs.name-prefix }}
+        INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+      run: |
+        bash "${{ github.action_path }}/scripts/sync-managed-catalogue.sh"
