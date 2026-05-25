@@ -4,10 +4,15 @@ GitHub Action to publish Azure Managed Application definitions from a folder str
 
 The action runs with Bash and Azure CLI on Ubuntu runners. For each subfolder in your source directory, it:
 
-1. Validates required files exist: mainTemplate.json and createUiDefinition.json.
+1. Resolves deployment template files in this order:
+	- If `<bicep-template-name>.bicep` exists (default `main.bicep`), it compiles to `mainTemplate.json`.
+	- If `mainTemplate.json` already exists, the action keeps it, validates Bicep compilation, and emits a warning instead of overwriting.
+	- If no Bicep file exists, it requires an existing `mainTemplate.json`.
 2. Packages the folder into a zip archive.
 3. Uploads the package to Azure Blob Storage.
 4. Creates or updates the Azure Managed Application definition.
+
+`createUiDefinition.json` is optional and included in the package only when present.
 
 This implementation follows the Azure CLI publish flow from Microsoft Learn:
 https://learn.microsoft.com/azure/azure-resource-manager/managed-applications/publish-service-catalog-app?tabs=azure-cli
@@ -27,6 +32,7 @@ https://learn.microsoft.com/azure/azure-resource-manager/managed-applications/pu
 | lock-level | No | ReadOnly | Managed application lock level |
 | name-prefix | No | empty | Prefix added to generated definition names |
 | subscription-id | No | empty | Subscription to set before processing |
+| bicep-template-name | No | main | Bicep template base filename (without extension), compiled to fixed output name `mainTemplate.json` |
 
 ## Outputs
 
@@ -45,15 +51,15 @@ Example:
 ```text
 catalog/
 	webapp-a/
-		mainTemplate.json
-		createUiDefinition.json
+		main.bicep              # optional (preferred when present)
+		mainTemplate.json       # required only when no Bicep file is found
+		createUiDefinition.json # optional
 		managedapp-metadata.json   # optional
 	webapp-b/
 		mainTemplate.json
-		createUiDefinition.json
 ```
 
-Each package zip is created from the subfolder content. Keep required files at the subfolder root.
+Each package zip is created from the subfolder content. Keep template files at the subfolder root.
 
 ## Optional Per-Folder Metadata
 

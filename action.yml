@@ -44,6 +44,10 @@ inputs:
     description: Optional Azure subscription ID to select before processing.
     required: false
     default: ""
+  bicep-template-name:
+    description: Base filename (without extension) for the Bicep template to compile to mainTemplate.json.
+    required: false
+    default: main
 
 outputs:
   processed-count:
@@ -73,5 +77,6 @@ runs:
         INPUT_LOCK_LEVEL: ${{ inputs.lock-level }}
         INPUT_NAME_PREFIX: ${{ inputs.name-prefix }}
         INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+        INPUT_BICEP_TEMPLATE_NAME: ${{ inputs.bicep-template-name }}
       run: |
         bash "${{ github.action_path }}/scripts/sync-managed-catalogue.sh"

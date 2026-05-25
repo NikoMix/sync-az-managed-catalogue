@@ -58,6 +58,12 @@ default_authorizations="${INPUT_AUTHORIZATION_PRINCIPAL_ID}:${INPUT_AUTHORIZATIO
 default_lock_level="${INPUT_LOCK_LEVEL:-ReadOnly}"
 name_prefix="${INPUT_NAME_PREFIX:-}"
 subscription_id="${INPUT_SUBSCRIPTION_ID:-}"
+bicep_template_name="${INPUT_BICEP_TEMPLATE_NAME:-main}"
+bicep_template_name="${bicep_template_name%.bicep}"
+
+if [[ -z "$bicep_template_name" ]]; then
+  bicep_template_name="main"
+fi
 
 # Mask the storage key in workflow logs.
 echo "::add-mask::${storage_account_key}"
@@ -99,16 +105,34 @@ process_folder() {
   folder_name="$(basename "$folder")"
 
   local main_template="${folder}/mainTemplate.json"
+  local bicep_file="${folder}/${bicep_template_name}.bicep"
   local create_ui="${folder}/createUiDefinition.json"
 
-  if [[ ! -f "$main_template" ]]; then
-    error "Skipping ${folder_name}: missing mainTemplate.json"
+  if [[ -f "$bicep_file" ]]; then
+    if [[ -f "$main_template" ]]; then
+      local transpiled_tmp="${tmp_dir}/${folder_name}-transpiled-mainTemplate.json"
+      log "Compiling ${bicep_template_name}.bicep for validation in ${folder_name}"
+      if ! az bicep build --file "$bicep_file" --outfile "$transpiled_tmp" --output none; then
+        error "Skipping ${folder_name}: failed to compile ${bicep_template_name}.bicep"
+        return 1
+      fi
+      echo "::warning::[sync-az-managed-catalogue] ${folder_name}: mainTemplate.json already exists. Using existing file and not overriding it."
+    else
+      log "Compiling ${bicep_template_name}.bicep -> mainTemplate.json for ${folder_name}"
+      if ! az bicep build --file "$bicep_file" --outfile "$main_template" --output none; then
+        error "Skipping ${folder_name}: failed to compile ${bicep_template_name}.bicep"
+        return 1
+      fi
+    fi
+  elif [[ ! -f "$main_template" ]]; then
+    error "Skipping ${folder_name}: missing ${bicep_template_name}.bicep and mainTemplate.json"
     return 1
   fi
 
-  if [[ ! -f "$create_ui" ]]; then
-    error "Skipping ${folder_name}: missing createUiDefinition.json"
-    return 1
+  if [[ -f "$create_ui" ]]; then
+    log "Including optional createUiDefinition.json in package for ${folder_name}"
+  else
+    log "Optional createUiDefinition.json not found for ${folder_name}; continuing"
   fi
 
   local definition_name
