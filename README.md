@@ -100,6 +100,8 @@ Add managedapp-metadata.json in a package folder to override defaults.
 
 If omitted, the action uses top-level input defaults.
 
+Important: If `managedapp-metadata.json` contains `resourceGroup`, it overrides the top-level `definition-resource-group` input for that package. The managed app definition scope in Azure errors will then reference the metadata-provided resource group.
+
 ## Usage From External Repository
 
 Use azure/login first, then call this action.
@@ -148,7 +150,8 @@ Your logged-in identity must be able to:
 
 1. Upload blobs in the target storage account/container.
 2. Create or update managed application definitions in definition-resource-group.
-3. Read role/principal IDs you provide.
+3. Perform the Azure RBAC action `Microsoft.Solutions/applicationDefinitions/write` at the scope of the target definition resource group (or higher).
+4. Read role/principal IDs you provide.
 
 ## Best Practices
 

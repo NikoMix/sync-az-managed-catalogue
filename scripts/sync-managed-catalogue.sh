@@ -157,12 +157,15 @@ if [[ ! -d "$source_folder" ]]; then
 fi
 
 log "Ensuring storage container exists: ${storage_container}"
-az storage container create \
+if ! az storage container create \
   --name "$storage_container" \
   --account-name "$storage_account_name" \
   --account-key "$storage_account_key" \
   --public-access off \
-  --output none
+  --output none; then
+  error "Failed to ensure storage container exists: ${storage_container}"
+  exit 1
+fi
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
@@ -301,6 +304,8 @@ print(data.get('location', default))
 PY
 )"
 
+    log "${folder_name}: managedapp-metadata.json overrides in effect (resourceGroup=${target_resource_group}, location=${target_location})"
+
     definition_name="$(safe_name "$definition_name")"
   fi
 
@@ -315,14 +320,17 @@ PY
   )
 
   log "Uploading package blob ${blob_name}"
-  az storage blob upload \
+  if ! az storage blob upload \
     --account-name "$storage_account_name" \
     --account-key "$storage_account_key" \
     --container-name "$storage_container" \
     --name "$blob_name" \
     --file "$zip_path" \
     --overwrite true \
-    --output none
+    --output none; then
+    error "Skipping ${folder_name}: failed to upload package blob ${blob_name}"
+    return 1
+  fi
 
   local blob_url
   blob_url="$(az storage blob url \
@@ -330,7 +338,12 @@ PY
     --account-key "$storage_account_key" \
     --container-name "$storage_container" \
     --name "$blob_name" \
-    --output tsv)"
+    --output tsv 2>/dev/null || true)"
+
+  if [[ -z "$blob_url" ]]; then
+    error "Skipping ${folder_name}: failed to resolve blob URL for ${blob_name}"
+    return 1
+  fi
 
   local -a auth_args
   read -r -a auth_args <<< "$authorizations"
@@ -339,12 +352,12 @@ PY
     return 1
   fi
 
-  log "Publishing managed app definition ${definition_name}"
+  log "Publishing managed app definition ${definition_name} in resource group ${target_resource_group}"
   if az managedapp definition show \
     --name "$definition_name" \
     --resource-group "$target_resource_group" \
     --output none >/dev/null 2>&1; then
-    az managedapp definition update \
+    if ! az managedapp definition update \
       --name "$definition_name" \
       --resource-group "$target_resource_group" \
       --lock-level "$lock_level" \
@@ -352,10 +365,13 @@ PY
       --description "$description" \
       --authorizations "${auth_args[@]}" \
       --package-file-uri "$blob_url" \
-      --output none
+      --output none; then
+      error "Skipping ${folder_name}: failed to update definition ${definition_name} in ${target_resource_group}"
+      return 1
+    fi
     updated_count=$((updated_count + 1))
   else
-    az managedapp definition create \
+    if ! az managedapp definition create \
       --name "$definition_name" \
       --resource-group "$target_resource_group" \
       --location "$target_location" \
@@ -364,7 +380,10 @@ PY
       --description "$description" \
       --authorizations "${auth_args[@]}" \
       --package-file-uri "$blob_url" \
-      --output none
+      --output none; then
+      error "Skipping ${folder_name}: failed to create definition ${definition_name} in ${target_resource_group}"
+      return 1
+    fi
     created_count=$((created_count + 1))
   fi
 
