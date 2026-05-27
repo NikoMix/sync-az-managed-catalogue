@@ -131,8 +131,23 @@ default_authorizations="${INPUT_AUTHORIZATION_PRINCIPAL_ID}:${INPUT_AUTHORIZATIO
 default_lock_level="${INPUT_LOCK_LEVEL:-ReadOnly}"
 name_prefix="${INPUT_NAME_PREFIX:-}"
 subscription_id="${INPUT_SUBSCRIPTION_ID:-}"
+register_solutions_provider_raw="${INPUT_REGISTER_SOLUTIONS_PROVIDER:-true}"
 bicep_template_name="${INPUT_BICEP_TEMPLATE_NAME:-main}"
 bicep_template_name="${bicep_template_name%.bicep}"
+
+register_solutions_provider="true"
+case "${register_solutions_provider_raw,,}" in
+  true|1|yes|y|on)
+    register_solutions_provider="true"
+    ;;
+  false|0|no|n|off)
+    register_solutions_provider="false"
+    ;;
+  *)
+    error "Invalid boolean value for register-solutions-provider: ${register_solutions_provider_raw}"
+    exit 1
+    ;;
+esac
 
 if [[ -z "$bicep_template_name" ]]; then
   bicep_template_name="main"
@@ -149,6 +164,24 @@ fi
 if [[ -n "$subscription_id" ]]; then
   log "Setting Azure subscription context to ${subscription_id}"
   az account set --subscription "$subscription_id"
+fi
+
+if [[ "$register_solutions_provider" == "true" ]]; then
+  provider_namespace="Microsoft.Solutions"
+  provider_state="$(az provider show --namespace "$provider_namespace" --query registrationState --output tsv 2>/dev/null || true)"
+
+  if [[ "$provider_state" != "Registered" ]]; then
+    log "Attempting to register resource provider ${provider_namespace} (current state: ${provider_state:-Unknown})"
+    if az provider register --namespace "$provider_namespace" --wait --output none; then
+      log "Resource provider ${provider_namespace} is registered"
+    else
+      echo "::warning::[sync-az-managed-catalogue] Failed to register ${provider_namespace}. Ensure it is pre-registered or grant Microsoft.Resources/subscriptions/providers/register/action."
+    fi
+  else
+    log "Resource provider ${provider_namespace} is already registered"
+  fi
+else
+  log "Skipping resource provider registration because register-solutions-provider is disabled"
 fi
 
 if [[ ! -d "$source_folder" ]]; then
@@ -357,7 +390,8 @@ PY
     --name "$definition_name" \
     --resource-group "$target_resource_group" \
     --output none >/dev/null 2>&1; then
-    if ! az managedapp definition update \
+    local update_output
+    if ! update_output="$(az managedapp definition update \
       --name "$definition_name" \
       --resource-group "$target_resource_group" \
       --lock-level "$lock_level" \
@@ -365,13 +399,31 @@ PY
       --description "$description" \
       --authorizations "${auth_args[@]}" \
       --package-file-uri "$blob_url" \
-      --output none; then
+      --output none 2>&1)"; then
       error "Skipping ${folder_name}: failed to update definition ${definition_name} in ${target_resource_group}"
+      echo "$update_output" >&2
       return 1
     fi
+
+    if [[ "$update_output" == *"AuthorizationFailed"* || "$update_output" == *"ERROR:"* ]]; then
+      error "Skipping ${folder_name}: update reported an authorization/platform error for ${definition_name} in ${target_resource_group}"
+      echo "$update_output" >&2
+      return 1
+    fi
+
+    if ! az managedapp definition show \
+      --name "$definition_name" \
+      --resource-group "$target_resource_group" \
+      --query id \
+      --output tsv >/dev/null 2>&1; then
+      error "Skipping ${folder_name}: update did not produce an accessible definition ${definition_name} in ${target_resource_group}"
+      return 1
+    fi
+
     updated_count=$((updated_count + 1))
   else
-    if ! az managedapp definition create \
+    local create_output
+    if ! create_output="$(az managedapp definition create \
       --name "$definition_name" \
       --resource-group "$target_resource_group" \
       --location "$target_location" \
@@ -380,10 +432,27 @@ PY
       --description "$description" \
       --authorizations "${auth_args[@]}" \
       --package-file-uri "$blob_url" \
-      --output none; then
+      --output none 2>&1)"; then
       error "Skipping ${folder_name}: failed to create definition ${definition_name} in ${target_resource_group}"
+      echo "$create_output" >&2
       return 1
     fi
+
+    if [[ "$create_output" == *"AuthorizationFailed"* || "$create_output" == *"ERROR:"* ]]; then
+      error "Skipping ${folder_name}: create reported an authorization/platform error for ${definition_name} in ${target_resource_group}"
+      echo "$create_output" >&2
+      return 1
+    fi
+
+    if ! az managedapp definition show \
+      --name "$definition_name" \
+      --resource-group "$target_resource_group" \
+      --query id \
+      --output tsv >/dev/null 2>&1; then
+      error "Skipping ${folder_name}: create did not produce an accessible definition ${definition_name} in ${target_resource_group}"
+      return 1
+    fi
+
     created_count=$((created_count + 1))
   fi
 

@@ -33,6 +33,7 @@ https://learn.microsoft.com/azure/azure-resource-manager/managed-applications/pu
 | lock-level | No | ReadOnly | Managed application lock level |
 | name-prefix | No | empty | Prefix added to generated definition names |
 | subscription-id | No | empty | Subscription to set before processing |
+| register-solutions-provider | No | true | Attempts to register Microsoft.Solutions provider before publish; disable if registration is centrally managed |
 | bicep-template-name | No | main | Bicep template base filename (without extension), compiled to fixed output name `mainTemplate.json` |
 
 ## Azure Login JSON Mapping
@@ -44,6 +45,8 @@ When you pass `azure-login-credentials-json`, the action reads these fields:
 - `tenantId` -> read for validation/logging only
 
 The action does not use `clientSecret` directly.
+
+By default, the action also attempts to register the `Microsoft.Solutions` resource provider (`register-solutions-provider: true`).
 
 These required values are not available in the Azure login JSON and must still be provided separately:
 
@@ -141,6 +144,7 @@ jobs:
 					definition-resource-group: managed-app-definition-rg
 					definition-location: westeurope
 					authorization-role-definition-id: ${{ secrets.MANAGEDAPP_ROLE_DEFINITION_ID }}
+					register-solutions-provider: true
 					lock-level: ReadOnly
 ```
 
@@ -152,6 +156,7 @@ Your logged-in identity must be able to:
 2. Create or update managed application definitions in definition-resource-group.
 3. Perform the Azure RBAC action `Microsoft.Solutions/applicationDefinitions/write` at the scope of the target definition resource group (or higher).
 4. Read role/principal IDs you provide.
+5. Optional when `register-solutions-provider` is true: perform `Microsoft.Resources/subscriptions/providers/register/action` at subscription scope to register `Microsoft.Solutions`.
 
 ## Best Practices
 

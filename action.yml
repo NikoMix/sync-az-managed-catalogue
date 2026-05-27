@@ -49,6 +49,10 @@ inputs:
     description: Optional Azure subscription ID to select before processing.
     required: false
     default: ""
+  register-solutions-provider:
+    description: Attempt to register Microsoft.Solutions resource provider before publishing definitions.
+    required: false
+    default: "true"
   bicep-template-name:
     description: Base filename (without extension) for the Bicep template to compile to mainTemplate.json.
     required: false
@@ -83,6 +87,7 @@ runs:
         INPUT_LOCK_LEVEL: ${{ inputs.lock-level }}
         INPUT_NAME_PREFIX: ${{ inputs.name-prefix }}
         INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+        INPUT_REGISTER_SOLUTIONS_PROVIDER: ${{ inputs.register-solutions-provider }}
         INPUT_BICEP_TEMPLATE_NAME: ${{ inputs.bicep-template-name }}
       run: |
         bash "${{ github.action_path }}/scripts/sync-managed-catalogue.sh"
