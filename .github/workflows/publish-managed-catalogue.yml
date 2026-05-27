@@ -1,0 +1,31 @@
+name: Publish Managed Catalogue
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Publish managed app definitions
+        uses: ./
+        with:
+          source-folder: catalog
+          azure-login-credentials-json: ${{ secrets.AZURE_CREDENTIALS }}
+          storage-account-name: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          storage-account-key: ${{ secrets.AZURE_STORAGE_KEY }}
+          definition-resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          definition-location: ${{ secrets.AZURE_REGION }}
+          authorization-role-definition-id: ${{ secrets.MANAGEDAPP_ROLE_DEFINITION_ID }}
+          lock-level: ReadOnly

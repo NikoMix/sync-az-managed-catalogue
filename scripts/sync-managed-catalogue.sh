@@ -41,6 +41,79 @@ safe_name() {
 require_command az
 require_command zip
 
+azure_login_credentials_json="${INPUT_AZURE_LOGIN_CREDENTIALS_JSON:-}"
+creds_client_id=""
+creds_tenant_id=""
+creds_subscription_id=""
+
+if [[ -n "$azure_login_credentials_json" ]]; then
+  require_command python3
+
+  mapfile -t creds_fields < <(
+    INPUT_AZURE_LOGIN_CREDENTIALS_JSON="$azure_login_credentials_json" python3 - <<'PY'
+import json
+import os
+import sys
+
+raw = os.environ.get("INPUT_AZURE_LOGIN_CREDENTIALS_JSON", "").strip()
+if not raw:
+    print()
+    print()
+    print()
+    sys.exit(0)
+
+try:
+    data = json.loads(raw)
+except Exception as exc:
+    print(f"Invalid INPUT_AZURE_LOGIN_CREDENTIALS_JSON: {exc}", file=sys.stderr)
+    sys.exit(2)
+
+if not isinstance(data, dict):
+    print("INPUT_AZURE_LOGIN_CREDENTIALS_JSON must be a JSON object", file=sys.stderr)
+    sys.exit(2)
+
+def pick(*keys):
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+print(pick("clientId", "client-id", "client_id"))
+print(pick("tenantId", "tenant-id", "tenant_id"))
+print(pick("subscriptionId", "subscription-id", "subscription_id"))
+PY
+  )
+
+  if [[ ${#creds_fields[@]} -gt 0 ]]; then
+    creds_client_id="${creds_fields[0]}"
+  fi
+  if [[ ${#creds_fields[@]} -gt 1 ]]; then
+    creds_tenant_id="${creds_fields[1]}"
+  fi
+  if [[ ${#creds_fields[@]} -gt 2 ]]; then
+    creds_subscription_id="${creds_fields[2]}"
+  fi
+
+  if [[ -z "${INPUT_SUBSCRIPTION_ID:-}" && -n "$creds_subscription_id" ]]; then
+    INPUT_SUBSCRIPTION_ID="$creds_subscription_id"
+  fi
+
+  if [[ -z "${INPUT_AUTHORIZATION_PRINCIPAL_ID:-}" && -n "$creds_client_id" ]]; then
+    resolved_principal_id="$(az ad sp show --id "$creds_client_id" --query id --output tsv 2>/dev/null || true)"
+    if [[ -n "$resolved_principal_id" ]]; then
+      INPUT_AUTHORIZATION_PRINCIPAL_ID="$resolved_principal_id"
+      log "Resolved authorization-principal-id from azure-login-credentials-json clientId"
+    else
+      log "Could not auto-resolve authorization-principal-id from clientId; provide authorization-principal-id explicitly"
+    fi
+  fi
+
+  if [[ -n "$creds_tenant_id" ]]; then
+    log "Read tenantId from azure-login-credentials-json"
+  fi
+fi
+
 require_env INPUT_STORAGE_ACCOUNT_NAME
 require_env INPUT_STORAGE_ACCOUNT_KEY
 require_env INPUT_DEFINITION_RESOURCE_GROUP

@@ -28,10 +28,15 @@ inputs:
     required: true
   authorization-principal-id:
     description: Principal object ID that receives permissions on managed resource groups.
-    required: true
+    required: false
+    default: ""
   authorization-role-definition-id:
     description: Role definition ID (GUID) assigned to the authorization principal.
     required: true
+  azure-login-credentials-json:
+    description: Optional Azure login JSON (same shape as azure/login creds) used to derive subscription-id and authorization-principal-id.
+    required: false
+    default: ""
   lock-level:
     description: Managed application definition lock level.
     required: false
@@ -74,6 +79,7 @@ runs:
         INPUT_DEFINITION_LOCATION: ${{ inputs.definition-location }}
         INPUT_AUTHORIZATION_PRINCIPAL_ID: ${{ inputs.authorization-principal-id }}
         INPUT_AUTHORIZATION_ROLE_DEFINITION_ID: ${{ inputs.authorization-role-definition-id }}
+        INPUT_AZURE_LOGIN_CREDENTIALS_JSON: ${{ inputs.azure-login-credentials-json }}
         INPUT_LOCK_LEVEL: ${{ inputs.lock-level }}
         INPUT_NAME_PREFIX: ${{ inputs.name-prefix }}
         INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}

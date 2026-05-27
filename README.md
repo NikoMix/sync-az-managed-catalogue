@@ -27,12 +27,31 @@ https://learn.microsoft.com/azure/azure-resource-manager/managed-applications/pu
 | storage-container | No | managedapp-packages | Blob container to store package zip files |
 | definition-resource-group | Yes | - | Resource group that stores managed app definitions |
 | definition-location | Yes | - | Azure region for managed app definitions |
-| authorization-principal-id | Yes | - | Principal object ID granted permissions on managed resource groups |
+| authorization-principal-id | Conditionally | empty | Principal object ID granted permissions on managed resource groups. If omitted and azure-login-credentials-json is provided, action tries to resolve it from clientId |
 | authorization-role-definition-id | Yes | - | Role definition ID (GUID) used with the principal |
+| azure-login-credentials-json | No | empty | Optional Azure login JSON (same shape as azure/login creds) used to derive subscription-id and authorization-principal-id |
 | lock-level | No | ReadOnly | Managed application lock level |
 | name-prefix | No | empty | Prefix added to generated definition names |
 | subscription-id | No | empty | Subscription to set before processing |
 | bicep-template-name | No | main | Bicep template base filename (without extension), compiled to fixed output name `mainTemplate.json` |
+
+## Azure Login JSON Mapping
+
+When you pass `azure-login-credentials-json`, the action reads these fields:
+
+- `subscriptionId` -> `subscription-id` (only when `subscription-id` input is empty)
+- `clientId` -> used to resolve `authorization-principal-id` via `az ad sp show --id <clientId> --query id`
+- `tenantId` -> read for validation/logging only
+
+The action does not use `clientSecret` directly.
+
+These required values are not available in the Azure login JSON and must still be provided separately:
+
+- `storage-account-name`
+- `storage-account-key`
+- `definition-resource-group`
+- `definition-location`
+- `authorization-role-definition-id`
 
 ## Outputs
 
@@ -113,12 +132,12 @@ jobs:
 				uses: nikomix/sync-az-managed-catalogue@v1
 				with:
 					source-folder: catalog
+					azure-login-credentials-json: ${{ secrets.AZURE_CREDENTIALS }}
 					storage-account-name: ${{ secrets.PACKAGE_STORAGE_ACCOUNT_NAME }}
 					storage-account-key: ${{ secrets.PACKAGE_STORAGE_ACCOUNT_KEY }}
 					storage-container: managedapp-packages
 					definition-resource-group: managed-app-definition-rg
 					definition-location: westeurope
-					authorization-principal-id: ${{ secrets.MANAGEDAPP_PRINCIPAL_ID }}
 					authorization-role-definition-id: ${{ secrets.MANAGEDAPP_ROLE_DEFINITION_ID }}
 					lock-level: ReadOnly
 ```
